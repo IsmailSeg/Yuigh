@@ -1,71 +1,99 @@
-require('dotenv').config();
+require("dotenv").config();
 
 const {
     Client,
     GatewayIntentBits,
     REST,
     Routes,
-    SlashCommandBuilder
-} = require('discord.js');
+    SlashCommandBuilder,
+    Events
+} = require("discord.js");
 
-const axios = require('axios');
+const axios = require("axios");
 
-// Vérifie les variables d'environnement
+// =====================
+// Vérifications
+// =====================
+
 if (!process.env.TOKEN) {
-    console.error("❌ Variable TOKEN manquante !");
+    console.error("❌ TOKEN manquant dans les variables.");
     process.exit(1);
 }
 
 if (!process.env.OPENAI_API_KEY) {
-    console.error("❌ Variable OPENAI_API_KEY manquante !");
+    console.error("❌ OPENAI_API_KEY manquante dans les variables.");
     process.exit(1);
 }
+
+console.log("🚀 Démarrage du bot...");
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-client.once('ready', async () => {
-    console.log(`✅ Bot connecté : ${client.user.tag}`);
+// =====================
+// Connexion
+// =====================
+
+client.once(Events.ClientReady, async (client) => {
+
+    console.log(`✅ Connecté en tant que ${client.user.tag}`);
 
     try {
-        const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+        const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
         await rest.put(
             Routes.applicationCommands(client.user.id),
             {
                 body: [
                     new SlashCommandBuilder()
-                        .setName('ask')
-                        .setDescription('Pose une question à l\'IA')
+                        .setName("ask")
+                        .setDescription("Pose une question à l'IA")
                         .addStringOption(option =>
                             option
-                                .setName('question')
-                                .setDescription('Ta question')
+                                .setName("question")
+                                .setDescription("Votre question")
                                 .setRequired(true)
                         )
                 ]
             }
         );
 
-        console.log("✅ Commande /ask enregistrée.");
+        console.log("✅ Commande /ask enregistrée");
+
     } catch (err) {
-        console.error("❌ Erreur lors de l'enregistrement des commandes :");
+
+        console.error("❌ Impossible d'enregistrer la commande");
         console.error(err);
+
     }
+
 });
 
-client.on('interactionCreate', async interaction => {
+// =====================
+// Slash Command
+// =====================
+
+client.on(Events.InteractionCreate, async interaction => {
+
+    console.log("📩 Interaction reçue");
 
     if (!interaction.isChatInputCommand()) return;
 
-    if (interaction.commandName !== 'ask') return;
+    console.log("Commande :", interaction.commandName);
 
-    const question = interaction.options.getString('question');
+    if (interaction.commandName !== "ask") return;
+
+    const question = interaction.options.getString("question");
+
+    console.log("Question :", question);
 
     await interaction.deferReply();
 
     try {
+
+        console.log("📡 Envoi vers OpenAI...");
 
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
@@ -77,8 +105,7 @@ client.on('interactionCreate', async interaction => {
                         content: question
                     }
                 ],
-                temperature: 0.8,
-                max_tokens: 600
+                max_tokens: 500
             },
             {
                 headers: {
@@ -88,38 +115,39 @@ client.on('interactionCreate', async interaction => {
             }
         );
 
-        let texte = response.data.choices[0].message.content;
+        console.log("✅ Réponse OpenAI reçue");
 
-        if (texte.length > 1900) {
-            texte = texte.substring(0, 1900) + "...";
+        const texte = response.data.choices[0].message.content;
+
+        await interaction.editReply(texte);
+
+    } catch (err) {
+
+        console.error("============== ERREUR OPENAI ==============");
+
+        if (err.response) {
+            console.error("Status :", err.response.status);
+            console.error(err.response.data);
+        } else {
+            console.error(err);
         }
 
-        await interaction.editReply(
-            `## ❓ Question\n${question}\n\n## 🤖 Réponse\n${texte}`
-        );
-
-    } catch (e) {
-
-        console.error("====================================");
-        console.error("ERREUR OPENAI");
-        console.error("Status :", e.response?.status);
-        console.error("Data :", JSON.stringify(e.response?.data, null, 2));
-        console.error("Message :", e.message);
-        console.error("====================================");
-
-        let erreur = "Erreur inconnue";
-
-        if (e.response?.data?.error?.message) {
-            erreur = e.response.data.error.message;
-        } else if (e.message) {
-            erreur = e.message;
-        }
+        console.error("===========================================");
 
         await interaction.editReply(
-            `❌ Erreur avec l'IA :\n\`\`\`\n${erreur}\n\`\`\``
+            "❌ Impossible de contacter OpenAI. Vérifie les logs Railway."
         );
+
     }
 
 });
 
+// =====================
+// Login
+// =====================
+
 client.login(process.env.TOKEN);
+
+client.on("error", console.error);
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
