@@ -6,8 +6,7 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    Events,
-    Interaction   // ← Important
+    Events
 } = require("discord.js");
 
 const axios = require("axios");
@@ -23,17 +22,11 @@ if (!process.env.GROQ_API_KEY) {
 }
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
+    intents: [GatewayIntentBits.Guilds]
 });
 
-// ======================
-//      READY + /ask
-// ======================
 client.once(Events.ClientReady, async (client) => {
+
     console.log(`✅ Connecté : ${client.user.tag}`);
 
     const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -46,7 +39,8 @@ client.once(Events.ClientReady, async (client) => {
                     .setName("ask")
                     .setDescription("Pose une question à l'IA")
                     .addStringOption(option =>
-                        option.setName("question")
+                        option
+                            .setName("question")
                             .setDescription("Ta question")
                             .setRequired(true)
                     )
@@ -55,40 +49,30 @@ client.once(Events.ClientReady, async (client) => {
     );
 
     console.log("✅ Commande /ask enregistrée");
+
 });
 
-// Slash command
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isChatInputCommand() || interaction.commandName !== "ask") return;
+
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== "ask") return;
 
     const question = interaction.options.getString("question");
+
     await interaction.deferReply();
-    await handleAIResponse(interaction, question);
-});
-
-// Réponse à un message du bot
-client.on(Events.MessageCreate, async message => {
-    if (message.author.bot || !message.reference) return;
 
     try {
-        const referenced = await message.fetchReference();
-        if (referenced.author.id === client.user.id) {
-            await message.channel.sendTyping();
-            await handleAIResponse(message, message.content);
-        }
-    } catch (e) {
-        console.error("Erreur reply :", e);
-    }
-});
 
-// Fonction IA commune
-async function handleAIResponse(source, userMessage) {
-    try {
-        const res = await axios.post(
+        const response = await axios.post(
             "https://api.groq.com/openai/v1/chat/completions",
             {
                 model: "llama-3.3-70b-versatile",
-                messages: [{ role: "user", content: userMessage }],
+                messages: [
+                    {
+                        role: "user",
+                        content: question
+                    }
+                ],
                 temperature: 0.7,
                 max_tokens: 1024
             },
@@ -100,23 +84,20 @@ async function handleAIResponse(source, userMessage) {
             }
         );
 
-        const reply = res.data.choices[0].message.content;
+        await interaction.editReply(
+            response.data.choices[0].message.content
+        );
 
-        if (source instanceof Interaction) {
-            await source.editReply(reply);
-        } else {
-            await source.reply(reply);
-        }
     } catch (err) {
-        console.error(err.response?.data || err);
-        const errMsg = "❌ Erreur avec Groq AI.";
 
-        if (source instanceof Interaction) {
-            await source.editReply(errMsg);
-        } else {
-            await source.reply(errMsg);
-        }
+        console.error(err.response?.data || err.message);
+
+        await interaction.editReply(
+            "❌ Erreur avec Groq."
+        );
+
     }
-}
+
+});
 
 client.login(process.env.TOKEN);
