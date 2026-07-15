@@ -6,7 +6,8 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    Events
+    Events,
+    Interaction   // ← Ajout ici
 } = require("discord.js");
 
 const axios = require("axios");
@@ -73,18 +74,14 @@ client.on(Events.InteractionCreate, async interaction => {
 //     REPLY TO BOT
 // ======================
 client.on(Events.MessageCreate, async message => {
-    // Ignorer les messages du bot lui-même
     if (message.author.bot) return;
-
-    // Vérifier si c'est une réponse à un message du bot
     if (!message.reference) return;
 
     try {
         const referencedMessage = await message.fetchReference();
         
-        // Si le message référencé est du bot
         if (referencedMessage.author.id === client.user.id) {
-            await message.channel.sendTyping(); // Indicateur "est en train d'écrire"
+            await message.channel.sendTyping();
             await handleAIResponse(message, message.content);
         }
     } catch (err) {
@@ -92,19 +89,16 @@ client.on(Events.MessageCreate, async message => {
     }
 });
 
-// Fonction commune pour appeler Groq
+// ======================
+//     FONCTION COMMUNE
+// ======================
 async function handleAIResponse(source, userMessage) {
     try {
         const response = await axios.post(
             "https://api.groq.com/openai/v1/chat/completions",
             {
                 model: "llama-3.3-70b-versatile",
-                messages: [
-                    {
-                        role: "user",
-                        content: userMessage
-                    }
-                ],
+                messages: [{ role: "user", content: userMessage }],
                 temperature: 0.7,
                 max_tokens: 1024
             },
