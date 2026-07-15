@@ -7,7 +7,7 @@ const {
     Routes,
     SlashCommandBuilder,
     Events,
-    Interaction   // ← Ajout ici
+    Interaction   // ← Important
 } = require("discord.js");
 
 const axios = require("axios");
@@ -31,7 +31,7 @@ const client = new Client({
 });
 
 // ======================
-//      /ask COMMAND
+//      READY + /ask
 // ======================
 client.once(Events.ClientReady, async (client) => {
     console.log(`✅ Connecté : ${client.user.tag}`);
@@ -46,8 +46,7 @@ client.once(Events.ClientReady, async (client) => {
                     .setName("ask")
                     .setDescription("Pose une question à l'IA")
                     .addStringOption(option =>
-                        option
-                            .setName("question")
+                        option.setName("question")
                             .setDescription("Ta question")
                             .setRequired(true)
                     )
@@ -58,43 +57,34 @@ client.once(Events.ClientReady, async (client) => {
     console.log("✅ Commande /ask enregistrée");
 });
 
-// ======================
-//     SLASH COMMAND
-// ======================
+// Slash command
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand() || interaction.commandName !== "ask") return;
 
     const question = interaction.options.getString("question");
     await interaction.deferReply();
-
     await handleAIResponse(interaction, question);
 });
 
-// ======================
-//     REPLY TO BOT
-// ======================
+// Réponse à un message du bot
 client.on(Events.MessageCreate, async message => {
-    if (message.author.bot) return;
-    if (!message.reference) return;
+    if (message.author.bot || !message.reference) return;
 
     try {
-        const referencedMessage = await message.fetchReference();
-        
-        if (referencedMessage.author.id === client.user.id) {
+        const referenced = await message.fetchReference();
+        if (referenced.author.id === client.user.id) {
             await message.channel.sendTyping();
             await handleAIResponse(message, message.content);
         }
-    } catch (err) {
-        console.error("Erreur lors de la récupération du message référencé :", err);
+    } catch (e) {
+        console.error("Erreur reply :", e);
     }
 });
 
-// ======================
-//     FONCTION COMMUNE
-// ======================
+// Fonction IA commune
 async function handleAIResponse(source, userMessage) {
     try {
-        const response = await axios.post(
+        const res = await axios.post(
             "https://api.groq.com/openai/v1/chat/completions",
             {
                 model: "llama-3.3-70b-versatile",
@@ -110,22 +100,21 @@ async function handleAIResponse(source, userMessage) {
             }
         );
 
-        const aiReply = response.data.choices[0].message.content;
+        const reply = res.data.choices[0].message.content;
 
         if (source instanceof Interaction) {
-            await source.editReply(aiReply);
+            await source.editReply(reply);
         } else {
-            await source.reply(aiReply);
+            await source.reply(reply);
         }
-
     } catch (err) {
-        console.error(err.response?.data || err.message);
-        const errorMsg = "❌ Erreur avec Groq AI.";
+        console.error(err.response?.data || err);
+        const errMsg = "❌ Erreur avec Groq AI.";
 
         if (source instanceof Interaction) {
-            await source.editReply(errorMsg);
+            await source.editReply(errMsg);
         } else {
-            await source.reply(errorMsg);
+            await source.reply(errMsg);
         }
     }
 }
